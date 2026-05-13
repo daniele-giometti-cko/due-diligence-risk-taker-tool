@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Due Diligence Agentic - Logs Teller Agent
 
-Internal full-stack tool for querying DynamoDB tables, CloudWatch Logs, and Datadog via AI. The primary feature is the **Datadog Chronicle** — a streaming, agentic flow where a Python container on AWS AgentCore Runtime uses Strands + Claude to query Datadog and narrate what happened. Local developer use only — no deployment pipeline.
+Internal full-stack tool for querying Datadog logs and DynamoDB tables via AI. The primary feature is the **Datadog Chronicle** — a streaming, agentic flow where a Python container on AWS AgentCore Runtime uses Strands + Claude to query Datadog and narrate what happened. The **DynamoDB explorer** is a secondary mode for ad-hoc data inspection in lower environments (QA). Local developer use only — no deployment pipeline.
 
 ## Source layout
 
@@ -13,33 +13,29 @@ due-diligence-logs-teller-agent/
 ├── api/                                            # .NET 8 Web API (port 5000)
 │   ├── Controllers/
 │   │   ├── QueryController.cs                      # DynamoDB endpoints + profile/env-labels
-│   │   ├── CloudWatchController.cs                 # CloudWatch log groups + query endpoints
 │   │   └── AgentChronicleController.cs             # POST /agent-chronicle/{generate,stream} — SSE streaming
 │   ├── Services/
-│   │   ├── AiQueryService.cs                       # Bedrock invocation; DynamoDbSystemPrompt + CloudWatchSystemPrompt + ChronicleSystemPrompt
+│   │   ├── AiQueryService.cs                       # Bedrock invocation; DynamoDbSystemPrompt
 │   │   ├── DynamoDbService.cs                      # Query/Scan executor; per-profile client creation; BuildExpressionValues
-│   │   ├── CloudWatchService.cs                    # Insights query runner with 500ms polling loop; tag-filtered log group discovery
 │   │   ├── AgentRuntimeService.cs                  # Hand-rolled SigV4; streams SSE from AgentCore Runtime; parses __METRICS__ sentinel
 │   │   └── BedrockAgentService.cs                  # InvokeAgentAsync via EventStream (legacy, unused in production flow)
 │   ├── Models/
-│   │   ├── Models.cs                               # DynamoQuery, GenerateQueryRequest, ExecuteQueryResponse, AgentChronicleRequest/Response, AgentStreamChunk
-│   │   └── CloudWatchModels.cs                     # CloudWatchQuery, GenerateCloudWatchQueryRequest, CloudWatchQueryResult, ChronicleRequest/Response
+│   │   └── Models.cs                               # DynamoQuery, GenerateQueryRequest, ExecuteQueryResponse, AgentChronicleRequest/Response, AgentStreamChunk
 │   ├── Program.cs                                  # DI wiring; Bedrock client setup; CORS → localhost:3000
 │   └── appsettings.json                            # AWS region, Bedrock config (ModelId, AgentRuntimeArn), EnvironmentLabels
 ├── ui/                                             # Next.js 14 App Router (port 3000)
 │   ├── app/
-│   │   ├── page.tsx                                # Root page — renders DatadogChronicle (primary feature)
+│   │   ├── page.tsx                                # Root page — tab switcher between DatadogChronicle and DynamoDbExplorer
 │   │   └── layout.tsx                              # HTML shell, monospace font, 2rem padding
 │   ├── components/
 │   │   ├── DatadogChronicle.tsx                    # PRIMARY: streams /agent-chronicle/stream; localStorage history (20 max); token counts
+│   │   ├── DynamoDbExplorer.tsx                    # DDB mode wrapper: profile picker + QueryInput + ManualQueryBuilder + QueryPreview + ResultsTable
 │   │   ├── QueryInput.tsx                          # NL input + table dropdown for DDB mode
 │   │   ├── ManualQueryBuilder.tsx                  # PK/SK form builder
 │   │   ├── QueryPreview.tsx                        # Editable JSON textarea
-│   │   ├── ResultsTable.tsx                        # Dynamic-column table; shared by DDB and CW modes
-│   │   └── CloudWatchExplorer.tsx                  # Self-contained CloudWatch mode UI
+│   │   └── ResultsTable.tsx                        # Dynamic-column table
 │   └── services/
-│       ├── queryService.ts                         # DDB + profile API calls
-│       └── cloudWatchService.ts                    # CloudWatch API calls
+│       └── queryService.ts                         # DDB + profile API calls
 ├── agentcore/                                      # Python AgentCore Runtime container
 │   ├── agent_runtime.py                            # BedrockAgentCoreApp entrypoint; Strands Agent; Datadog MCP via Secrets Manager creds; streams via yield
 │   ├── deploy.py                                   # bedrock-agentcore-starter-toolkit; Docker build + ECR push + create_agent_runtime
@@ -54,7 +50,7 @@ due-diligence-logs-teller-agent/
 └── due-diligence-logs-teller-agent.sln             # Visual Studio solution file
 ```
 
-## Three query modes
+## Two query modes
 
 ### 1. Datadog Chronicle (primary — agentic)
 
@@ -74,13 +70,9 @@ The main feature. Natural language prompt → AgentCore Runtime (Python) → Str
 - The canonical URI path must be **double-encoded** via `BotocoreCanonicalUri()` — `%3A` → `%253A`, matching AWS server-side verification
 - Signed headers: `host`, `x-amz-date`, `x-amz-security-token`, `x-amzn-bedrock-agentcore-runtime-session-id`
 
-### 2. CloudWatch Logs (DDB-style UI)
+### 2. DynamoDB (QA only — AI-assisted)
 
-Natural language or manual query → CloudWatch Insights → results table + optional chronicle via local Bedrock.
-
-### 3. DynamoDB (DDB-style UI)
-
-Natural language or manual query → DynamoDB Query/Scan → results table.
+Natural language or manual builder → DynamoDB Query/Scan → results table. The AI **generates** the query; the user reviews/edits the JSON and executes. Intended for ad-hoc data inspection in lower environments only.
 
 ## Key domain contracts
 
@@ -99,24 +91,13 @@ Natural language or manual query → DynamoDB Query/Scan → results table.
 }
 ```
 
-### CloudWatchQuery — CW contract
-
-```json
-{
-  "logGroupName": "string",
-  "queryString": "CloudWatch Insights syntax",
-  "lookbackHours": number,
-  "profile": "string | null"
-}
-```
-
 ### AgentChronicleRequest — Datadog contract
 
 ```json
 { "prompt": "string", "sessionId": "string | null" }
 ```
 
-The frontend TypeScript interfaces in `queryService.ts` / `cloudWatchService.ts` must stay in sync with these C# models. JSON is camelCase throughout (configured in `Program.cs`).
+The frontend TypeScript interfaces in `queryService.ts` must stay in sync with these C# models. JSON is camelCase throughout (configured in `Program.cs`).
 
 ## AI flows
 
@@ -130,36 +111,21 @@ The frontend TypeScript interfaces in `queryService.ts` / `cloudWatchService.ts`
 6. `AgentChronicleController` forwards as SSE `data: {json}` events
 7. `DatadogChronicle.tsx` appends text chunks, captures token counts on final metrics chunk
 
-### DDB / CloudWatch AI flow
+### DDB AI flow
 
-1. Natural language → `POST /query/generate-query` or `POST /cloudwatch/generate-query`
+1. Natural language → `POST /query/generate-query`
 2. `AiQueryService.InvokeBedrockAsync` → Bedrock `InvokeModelAsync`; model from `appsettings.json` (`eu.anthropic.claude-sonnet-4-6` default)
-3. Returns typed query struct. **AI never executes anything.**
+3. Returns typed `DynamoQuery` struct. **AI never executes anything.**
 4. User reviews/edits JSON in preview textarea
-5. User clicks Execute → `POST /query/execute-query` or `POST /cloudwatch/query`
+5. User clicks Execute → `POST /query/execute-query`
 
 ## AI prompt contracts
 
-`AiQueryService` has three `const string` prompts:
+`AiQueryService` has one `const string` prompt:
 
 - **DynamoDbSystemPrompt:** JSON-only, `:param` notation, Query/Scan schema
-- **CloudWatchSystemPrompt:** JSON-only, Insights syntax, known log group mappings (see below)
-- **ChronicleSystemPrompt:** Plain prose, past tense, ≤400 words, no raw payloads
 
 `agent_runtime.py` has its own `SYSTEM_PROMPT` for Datadog: ≤2 queries, limit 50, ≤300 words, never expose raw logs.
-
-### Known CloudWatch log groups (update when new Lambdas are added)
-
-| Alias | Log group path |
-|-------|---------------|
-| "notifier" / "case notifier" | `/aws/lambda/due-diligence-pep-case-notifier-lambda` |
-| "llm adjudicator" / "adjudicator" | `/aws/lambda/due-diligence-llm-adjudicator-lambda` |
-| "bac" / "validifi" | `/aws/lambda/due-diligence-plugin-bac-validifi-lambda` |
-| "idv" / "shared idv" | `/aws/lambda/due-diligence-plugin-shared-idv-lambda` |
-| "scraper" / "case scraper" | `/aws/ecs/due-diligence-pep-case-data-scraper` |
-| "full case scraper" / "pep full" | `/aws/ecs/due-diligence-pep-full-case-data-scraper` |
-
-Also update `CLAUDE.md → Known log groups` section in `AiQueryService.CloudWatchSystemPrompt` when new Lambdas are identified.
 
 ## AWS infrastructure
 
@@ -178,12 +144,12 @@ arn:aws:bedrock-agentcore:eu-west-1:944945738260:runtime/due_diligence_logs_tell
 ```
 
 **Bedrock models:**
-- DDB/CW local invocations: `eu.anthropic.claude-sonnet-4-6` (via `Bedrock:ModelId` in appsettings)
+- DDB local invocations: `eu.anthropic.claude-sonnet-4-6` (via `Bedrock:ModelId` in appsettings)
 - AgentCore Python runtime: `eu.anthropic.claude-sonnet-4-5-20250929-v1:0` (via `MODEL_ID` env var)
 
-## Per-profile DynamoDB / CloudWatch clients
+## Per-profile DynamoDB clients
 
-`DynamoDbService` and `CloudWatchService` create short-lived, profile-specific AWS clients on demand using `CredentialProfileStoreChain`. The DI-injected default client is used only when no profile is selected. Always `using var` / `Dispose()` profile clients after the call.
+`DynamoDbService` creates short-lived, profile-specific AWS clients on demand using `CredentialProfileStoreChain`. The DI-injected default client is used only when no profile is selected. Always `using var` / `Dispose()` profile clients after the call.
 
 ## Environment labels
 
@@ -191,12 +157,11 @@ arn:aws:bedrock-agentcore:eu-west-1:944945738260:runtime/due_diligence_logs_tell
 
 ## Key invariants
 
-- **AI must never execute queries.** Generation and execution are always separate explicit user actions (DDB/CW modes).
-- **Validate before executing.** `QueryController` enforces non-empty `Table` and `KeyCondition`; `CloudWatchController` enforces non-empty `LogGroupName` and `QueryString`. Do not remove these guards.
-- **DynamoDB, CloudWatch, and Datadog data may contain Due Diligence domain data** (PEP screening results, entity records, case data). Never log raw result payloads — log counts and resource names only.
+- **AI must never execute DDB queries.** Generation and execution are always separate explicit user actions.
+- **Validate before executing.** `QueryController` enforces non-empty `Table` and `KeyCondition`. Do not remove these guards.
+- **DynamoDB and Datadog data may contain Due Diligence domain data** (PEP screening results, entity records, case data). Never log raw result payloads — log counts and resource names only.
 - **Bedrock bearer token must never appear in source or config files.** Store via `dotnet user-secrets set "Bedrock:BearerToken" "..."`. Injected into `AWS_BEARER_TOKEN_BEDROCK` at startup in `Program.cs`.
 - **`expressionValues` keys must use `:param` notation** — DynamoDB SDK requirement enforced by the AI prompt.
-- **CloudWatch Insights queries are async** — `CloudWatchService` polls `GetQueryResultsAsync` every 500 ms with a 30 s deadline. Do not convert this to a single-shot call.
 - **AgentCore SigV4 canonical URI must double-encode** — `BotocoreCanonicalUri()` re-encodes non-unreserved chars so `%3A` → `%253A`. This matches AWS server-side verification. Do not replace with `Uri.EscapeDataString` on the path.
 - **content-type must NOT be signed** for `bedrock-agentcore` requests — botocore omits it; signing it causes 403 errors.
 
@@ -248,5 +213,4 @@ Requires Docker running and AWS credentials with access to ECR in `cko-gen3-pg` 
 No tests exist yet.
 
 # TODO: xUnit tests for DynamoDbService.BuildExpressionValues (null map, mixed JsonElement types).
-# TODO: xUnit tests for QueryController / CloudWatchController validation guards.
-# TODO: integration test for CloudWatchService polling loop (mock GetQueryResultsAsync returning Running then Complete).
+# TODO: xUnit tests for QueryController validation guards.

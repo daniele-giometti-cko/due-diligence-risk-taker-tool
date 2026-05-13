@@ -1,6 +1,5 @@
 using Amazon.BedrockAgentRuntime;
 using Amazon.BedrockRuntime;
-using Amazon.CloudWatchLogs;
 using Amazon.DynamoDBv2;
 using Amazon.Extensions.NETCore.Setup;
 using Amazon.Runtime;
@@ -51,15 +50,12 @@ builder.Services.AddSingleton<IAmazonBedrockAgentRuntime>(new AmazonBedrockAgent
     new AmazonBedrockAgentRuntimeConfig { RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(bedrockRegion) }
 ));
 
-builder.Services.AddAWSService<IAmazonCloudWatchLogs>();
-
 builder.Services.AddSingleton<Amazon.Runtime.AWSCredentials>(bedrockCredentials);
 builder.Services.AddHttpClient("AgentRuntime");
 
 builder.Services.AddScoped<AiQueryService>();
 builder.Services.AddScoped<BedrockAgentService>();
 builder.Services.AddScoped<AgentRuntimeService>();
-builder.Services.AddScoped<CloudWatchService>();
 builder.Services.AddScoped<DynamoDbService>();
 
 builder.Services.AddCors(options =>
