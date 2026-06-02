@@ -1,0 +1,29 @@
+mode: ContinuousDeployment
+ignore:
+  sha: []
+branches:
+  develop:
+    mode: ContinuousDeployment
+    tag: unstable
+    increment: Minor
+  release:
+    mode: ContinuousDelivery
+    tag: rc
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+  hotfix:
+    mode: ContinuousDelivery
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+  main:
+    regex: ^main$
+    source-branches: ['main']
+    mode: ContinuousDelivery
+    increment: Minor
+    prevent-increment-of-merged-branch-version: true
+  unknown:
+    regex: (?<BranchName>.+)
+    mode: ContinuousDeployment
+    tag: unstable
+    increment: Minor
+    source-branches: ['main', 'develop', 'release', 'hotfix']

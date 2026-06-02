@@ -129,14 +129,40 @@ The frontend TypeScript interfaces in `queryService.ts` must stay in sync with t
 
 ## AWS infrastructure
 
+### Existing (already provisioned)
+
 | Resource | Type | Account | Region | Notes |
 |---|---|---|---|---|
-| `cko-gen3-qa` | AWS Account | 944945738260 | eu-west-1 | Application workload |
+| `cko-gen3-qa` | AWS Account | 944945738260 | eu-west-1 | Application workload. Same physical account the DD team labels `cko-merchant-risk-assessment-qa` in sibling repos. |
 | `due_diligence_logs_teller_agentruntime` | AgentCore Runtime | cko-gen3-qa | eu-west-1 | Python ARM64 container; ARN in appsettings.json |
 | `due-diligence-logs-teller-runtime-role` | IAM Role | cko-gen3-qa | — | Trust: `bedrock-agentcore.amazonaws.com` |
 | `due-diligence/logs-teller-agent/dd-api-key` | Secrets Manager | cko-gen3-qa | eu-west-1 | Datadog API key |
 | `due-diligence/logs-teller-agent/dd-app-key` | Secrets Manager | cko-gen3-qa | eu-west-1 | Datadog Application key |
 | `bedrock-agentcore-due_diligence_logs_teller_agentruntime` | ECR Repository | cko-gen3-**pg** | eu-west-1 | Cross-account (SCP blocks CreateRepository in qa) |
+
+### Planned (productionization — ECS Fargate behind internal ALB)
+
+Provisioned via inline `iac/` (Spacelift/OpenTofu, 100/160/200/300 layered, scraper-style). Per-environment; QA first. Naming `${var.env}-logs-teller-${component}`.
+
+| Resource | Type | Account | Region | Notes |
+|---|---|---|---|---|
+| `logs-teller-agent-api` | ECR Repository | cko-artifact (891377407345) | eu-west-1 | .NET API image. Pull granted cross-account to qa/prod; push from `cko-gh`. |
+| `logs-teller-agent-ui` | ECR Repository | cko-artifact (891377407345) | eu-west-1 | Next.js BFF image. |
+| ECS Fargate cluster | ECS | cko-gen3-qa | eu-west-1 | Two services: API (container port 5000) and UI/BFF (port 3000). |
+| Shared internal ALB listener rules + TGs | ELB | cko-gen3-qa | eu-west-1 | Wired into the shared `dd_network` HTTPS listener via remote state. `/api/*` → API; default → UI. Health `/api/_system/ping`. `internal`, `assign_public_ip=false`. |
+| API task role | IAM Role | cko-gen3-qa | — | `bedrock-agentcore:InvokeAgentRuntime` on the existing runtime ARN; `secretsmanager:GetSecretValue` on this app's secret(s); `dynamodb:Query/Scan` on QA tables (qa stack only); KMS decrypt. |
+| UI/BFF task role | IAM Role | cko-gen3-qa | — | `secretsmanager:GetSecretValue` on the app secret (Okta secret, NEXTAUTH_SECRET, downstream API key); KMS decrypt. No data-plane access. |
+| Task execution role(s) | IAM Role | cko-gen3-qa | — | ECR pull, CloudWatch Logs, Secrets Manager read for task bootstrap. |
+| `due-diligence/logs-teller-agent/api-secrets` | Secrets Manager | cko-gen3-qa | eu-west-1 | Downstream `X-API-KEY`, Bedrock bearer token. (per env) |
+| `due-diligence/logs-teller-agent/ui-secrets` | Secrets Manager | cko-gen3-qa | eu-west-1 | Okta client secret + client id, `NEXTAUTH_SECRET` (cookie encryption). (per env) |
+| App KMS CMK | KMS | cko-gen3-qa | eu-west-1 | Encrypts secrets + logs. |
+| CloudWatch log groups | CloudWatch | cko-gen3-qa | eu-west-1 | `/aws/ecs/logs-teller-{api,ui}`; forwarded to Datadog. |
+
+**Auth boundary (decided):** Okta session terminates at the Next.js BFF (HTTP-only encrypted cookie); the BFF injects `X-API-KEY` server-side; the .NET API validates `X-API-KEY` only (Checkout.Gateway), never the Okta token. Auth is conditional — empty config ⇒ both tiers run unauthenticated for local dev. See `docs/architecture/`.
+
+**Versioning & CI (decided):** `GitVersion.yml` (GitVersion) + reusable workflows from `cko-transformation/due-diligence-actions` (`ci-build-docker`, `release-gh`, `ci-deploy-service`, `ci-deploy-service-ui`, `codeql-analysis-csharp`). No plain VERSION files.
+
+**Observability & base images (decided):** Checkout.Diagnostics + Serilog → Datadog; CKO `pki-dotnet:aspnet-8.0.x-alpine` (API) and `pki-node` (UI) base images; `nuget.config` → CKO CodeArtifact.
 
 **AgentCore Runtime ARN** (in `appsettings.json`):
 ```

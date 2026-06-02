@@ -1,0 +1,56 @@
+flowchart TB
+    subgraph user_edge[User Edge]
+        engineer[DD engineer using browser]
+        session[Encrypted Okta session cookie\nHTTP-only, BFF-issued]
+    end
+
+    subgraph identity[Identity]
+        okta[Okta OIDC tenant\none app per environment]
+    end
+
+    subgraph network[Network Edge]
+        warp[Cloudflare WARP]
+        alb[Shared internal ALB\nHTTPS termination via private CA]
+    end
+
+    subgraph frontend[Presentation Container - Next.js BFF Fargate]
+        ui[App Router UI\nDatadog Chronicle tab plus DynamoDB QA tab]
+        oktaauth[Okta OIDC client\nPKCE, login/callback/logout routes]
+        withauth[withAuth server fetch\ninjects X-API-KEY to the API]
+        sseproxy[Streaming SSE proxy route\nWeb Streams, no buffering]
+    end
+
+    subgraph backend[Application Container - .NET 8 API Fargate]
+        apikey[X-API-KEY authentication\nCheckout.Gateway, IsConfigured fallback]
+        runtimecfg[GET /api/runtime-config\nbootstraps the BFF]
+        chronicle[AgentChronicleController\n/agent-chronicle/stream SSE]
+        agentsvc[AgentRuntimeService\nhand-rolled SigV4 to AgentCore]
+        query[QueryController\nDynamoDB generate plus execute]
+    end
+
+    subgraph external[External Systems]
+        agentcore[AgentCore Runtime\nStrands plus Claude plus Datadog MCP]
+        dynamodb[DynamoDB QA tables]
+        secrets[Secrets Manager]
+        datadog[Datadog observability]
+    end
+
+    engineer --> ui
+    ui --> session
+    ui -. sign in redirect when enabled .-> oktaauth
+    oktaauth -. OIDC PKCE .-> okta
+    engineer --> warp --> alb
+    alb -->|default route| ui
+    alb -->|/api routes| apikey
+    ui --> withauth
+    ui --> sseproxy
+    withauth -->|X-API-KEY| query
+    sseproxy -->|X-API-KEY, streamed| chronicle
+    apikey --> runtimecfg
+    chronicle --> agentsvc
+    agentsvc -->|SigV4| agentcore
+    query --> dynamodb
+    apikey -. read secrets .-> secrets
+    withauth -. read API key .-> secrets
+    chronicle -. logs and traces .-> datadog
+    query -. logs and traces .-> datadog

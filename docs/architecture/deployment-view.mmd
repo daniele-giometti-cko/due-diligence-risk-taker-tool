@@ -1,0 +1,69 @@
+flowchart TB
+    subgraph repo[GitHub Repository]
+        source[Source code\nui, api, agentcore, iac, workflows]
+        gha[GitHub Actions\ncalls due-diligence-actions reusable workflows]
+    end
+
+    subgraph artifact[Artifact Account 891377407345]
+        ecr_api[ECR repo\nlogs-teller-api image]
+        ecr_ui[ECR repo\nlogs-teller-ui image]
+    end
+
+    subgraph control[Provisioning Control Plane]
+        spacelift[Spacelift]
+        tofu[OpenTofu stacks\n100/160/200/300 layered]
+    end
+
+    subgraph aws[AWS Runtime - cko-gen3-qa 944945738260, eu-west-1]
+        dns[Private DNS\nckotech.internal]
+        pki[Private CA certificate\nACM PCA]
+        alb[Shared internal ALB\nHTTPS listener rules]
+        ecs[ECS Fargate cluster]
+        api_task[API service\n.NET 8, container port 5000]
+        ui_task[UI service\nNext.js BFF, container port 3000]
+        dynamodb[DynamoDB\nQA tables]
+        secretsmgr[Secrets Manager\nOkta secret, API key, DD keys, Bedrock token]
+        kms[KMS CMK]
+        logs[CloudWatch Logs]
+        agentcore[AgentCore Runtime\nalready deployed]
+    end
+
+    subgraph external[External Services]
+        okta[Okta OIDC\none app per env]
+        datadog[Datadog]
+    end
+
+    source --> gha
+    source --> spacelift
+    spacelift --> tofu
+    tofu --> dns
+    tofu --> pki
+    tofu --> alb
+    tofu --> ecs
+    tofu --> dynamodb
+    tofu --> secretsmgr
+    tofu --> kms
+    tofu --> logs
+
+    gha -->|build and push| ecr_api
+    gha -->|build and push| ecr_ui
+    gha -->|deploy service| api_task
+    gha -->|deploy service ui| ui_task
+
+    ecr_api -. pulled by .-> api_task
+    ecr_ui -. pulled by .-> ui_task
+
+    dns --> alb
+    pki --> alb
+    alb -->|default route| ui_task
+    alb -->|/api routes| api_task
+    ecs --> api_task
+    ecs --> ui_task
+    api_task --> dynamodb
+    api_task --> secretsmgr
+    api_task --> agentcore
+    api_task --> logs
+    ui_task --> secretsmgr
+    ui_task --> logs
+    ui_task -. OIDC when enabled .-> okta
+    logs -. forwarded .-> datadog
