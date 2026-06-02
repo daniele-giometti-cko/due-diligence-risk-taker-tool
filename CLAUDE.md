@@ -2,14 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Due Diligence Agentic - Logs Teller Agent
+## Due Diligence Risk-Taker Tool
 
-Internal full-stack tool for querying Datadog logs and DynamoDB tables via AI. The primary feature is the **Datadog Chronicle** — a streaming, agentic flow where a Python container on AWS AgentCore Runtime uses Strands + Claude to query Datadog and narrate what happened. The **DynamoDB explorer** is a secondary mode for ad-hoc data inspection in lower environments (QA). Local developer use only — no deployment pipeline.
+Internal full-stack operational tool for the Due Diligence team, with four modes (two built, two planned):
+
+1. **Datadog Chronicle** (built, primary) — a streaming, agentic flow where a Python container on AWS AgentCore Runtime uses Strands + Claude to query Datadog and narrate what happened.
+2. **DynamoDB explorer** (built) — ad-hoc table query showing the first ~20–30 items; AI generates the query, the user reviews/executes. QA only.
+3. **AWS SQS** (planned) — craft an event/payload/message attributes, then **send** or **purge**. Mutating actions; works against real queues (incl. `cko-gen2-prod` / `cko-gen3-prod`), so guarded by preview + typed-queue-name confirmation rather than environment lockout. Locally points to the developer's own AWS roles.
+4. **CloudWatch** (planned) — query a resource's logs (a Lambda or ECS service) and return a human-readable narrative outcome, with Bedrock helping write the response.
+
+> **Naming note:** the project was renamed from "logs-teller-agent" to "risk-taker-tool". The **already-deployed** AgentCore runtime, its IAM role, ECR repo, and the `due-diligence/logs-teller-agent/dd-*-key` Secrets Manager paths intentionally **keep their original `logs-teller` names** — renaming live resources would break mode #1. Only the application code/identity was renamed.
+
+Productionization (ECS Fargate behind an internal ALB, Okta on the UI) is a separate in-flight engagement — see `docs/architecture/` and the AWS infrastructure section below. Local developer use still works without any of that.
 
 ## Source layout
 
 ```
-due-diligence-logs-teller-agent/
+due-diligence-risk-taker-tool/
 ├── api/                                            # .NET 8 Web API (port 5000)
 │   ├── Controllers/
 │   │   ├── QueryController.cs                      # DynamoDB endpoints + profile/env-labels
@@ -47,12 +56,14 @@ due-diligence-logs-teller-agent/
 │   ├── agentcore-setup.md                          # (Deprecated) Classic Bedrock Agent + AgentCore Gateway approach — not used
 │   ├── agentcore-vs-direct-api.md                  # Decision analysis: Gateway vs direct Datadog MCP from Python
 │   └── issues-and-resolutions.md                   # 10 discovered issues + fixes; SigV4, ECR, Docker, Bedrock model IDs
-└── due-diligence-logs-teller-agent.sln             # Visual Studio solution file
+└── due-diligence-risk-taker-tool.sln               # Visual Studio solution file
 ```
 
-## Two query modes
+> The tree above is the **current** code (Datadog + DynamoDB modes). The SQS and CloudWatch modes (controllers/services/UI tabs) are **not yet implemented** — they will be added before productionization, per the agreed sequence (rename → build SQS + CloudWatch → productionize the full four-mode tool once).
 
-### 1. Datadog Chronicle (primary — agentic)
+## Modes
+
+### 1. Datadog Chronicle (built, primary — agentic)
 
 The main feature. Natural language prompt → AgentCore Runtime (Python) → Strands Agent → Datadog MCP → streaming SSE chronicle back to the UI.
 
@@ -70,9 +81,17 @@ The main feature. Natural language prompt → AgentCore Runtime (Python) → Str
 - The canonical URI path must be **double-encoded** via `BotocoreCanonicalUri()` — `%3A` → `%253A`, matching AWS server-side verification
 - Signed headers: `host`, `x-amz-date`, `x-amz-security-token`, `x-amzn-bedrock-agentcore-runtime-session-id`
 
-### 2. DynamoDB (QA only — AI-assisted)
+### 2. DynamoDB (built, QA only — AI-assisted)
 
-Natural language or manual builder → DynamoDB Query/Scan → results table. The AI **generates** the query; the user reviews/edits the JSON and executes. Intended for ad-hoc data inspection in lower environments only.
+Natural language or manual builder → DynamoDB Query/Scan → results table (first ~20–30 items). The AI **generates** the query; the user reviews/edits the JSON and executes. Intended for ad-hoc data inspection in lower environments only.
+
+### 3. AWS SQS (planned — mutating)
+
+Craft an event: body/payload, message attributes, and (FIFO) group/dedup ids → **Send** or **Purge**. Unlike the other modes this performs **mutating, sometimes irreversible** actions against real queues, and is needed in `cko-gen2-prod` / `cko-gen3-prod`. Guardrails are UX-level, not environment lockout: preview-before-send, and **purge requires typing the exact queue name**. Locally it uses the developer's selected AWS profile/role (same per-profile credential pattern as `DynamoDbService`); deployed, it uses the task role (cross-account to gen2-prod + gen3-prod). To be designed/implemented.
+
+### 4. CloudWatch (planned — narrated)
+
+Pick a resource (a Lambda or ECS service), query its logs (Logs Insights), and return a **human-readable narrative** of the outcome, with Bedrock writing the summary (candidate: reuse the existing `BedrockAgentService`, or a direct Bedrock model invoke like the DDB flow — to be decided). Read-only. To be designed/implemented.
 
 ## Key domain contracts
 
