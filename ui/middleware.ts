@@ -17,7 +17,7 @@ export function middleware(request: NextRequest) {
   }
 
   // If Okta is not configured or bypass is on, pass through.
-  const oktaConfigured = !!process.env.OKTA_DOMAIN && !!process.env.OKTA_CLIENT_ID && !!process.env.NEXTAUTH_SECRET;
+  const oktaConfigured = !!process.env.OKTA_AUTHORITY && !!process.env.OKTA_CLIENT_ID && !!process.env.NEXTAUTH_SECRET;
   if (!oktaConfigured || process.env.AUTH_BYPASS === 'true') {
     return NextResponse.next();
   }

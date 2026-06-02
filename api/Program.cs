@@ -6,6 +6,7 @@ using Amazon.Extensions.NETCore.Setup;
 using Amazon.Runtime;
 using Amazon.Runtime.CredentialManagement;
 using DueDiligenceRiskTakerTool.Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +62,30 @@ builder.Services.AddScoped<AgentRuntimeService>();
 builder.Services.AddScoped<DynamoDbService>();
 builder.Services.AddScoped<SqsService>();
 
+// Okta JWT Bearer — mirrors ra-tool-bff-api's auth setup.
+// IsConfigured fallback: auth only activates when both Authority and Audience are set,
+// so local dev without Okta credentials still works (the UI sets AUTH_BYPASS=true).
+var oktaAuthority = builder.Configuration["Okta:Authority"];
+var oktaAudience  = builder.Configuration["Okta:Audience"];
+var oktaConfigured = !string.IsNullOrWhiteSpace(oktaAuthority) && !string.IsNullOrWhiteSpace(oktaAudience);
+
+if (oktaConfigured)
+{
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = oktaAuthority;
+            options.Audience  = oktaAudience;
+            options.RequireHttpsMetadata = true;
+        });
+    builder.Services.AddAuthorization();
+    Console.WriteLine($"[Okta] JWT auth enabled — authority {oktaAuthority}");
+}
+else
+{
+    Console.WriteLine("[Okta] Not configured — running unauthenticated (local dev)");
+}
+
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
         policy.WithOrigins("http://localhost:3000")
@@ -76,6 +101,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+if (oktaConfigured)
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
 app.MapControllers();
 
 // Public health endpoint for the ALB target-group health check (no auth).
