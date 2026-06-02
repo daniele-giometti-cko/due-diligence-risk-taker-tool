@@ -1,7 +1,7 @@
 # POC Dockerfile for the Risk-Taker Tool API.
 # Stock mcr.microsoft.com base images for fast, dependency-free local builds.
 # Productionization (Phase 3) will switch to the CKO pki-dotnet base + Checkout.Diagnostics.
-# Build context = the api/ directory:  docker build -f api/Dockerfile api
+# Build context = the Api directory:  docker build -f applications/DueDiligence.RiskTakerTool.Api/Dockerfile applications/DueDiligence.RiskTakerTool.Api
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
 WORKDIR /src
 COPY *.csproj ./

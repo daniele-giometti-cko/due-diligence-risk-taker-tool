@@ -1,0 +1,27 @@
+version: "1"
+
+stack_defaults:
+  before_init:
+    - set -x
+    - echo "Configure git"
+    - git config --global --add safe.directory /mnt/workspace/source
+    - git config --global credential.helper 'store --file ${PWD}/.credentials'
+    - echo "https://${GIT_USER}:${GIT_TOKEN}@github.com" > ${PWD}/.credentials
+    - git remote set-url origin "https://${GIT_USER}:${GIT_TOKEN}@github.com/$TF_VAR_spacelift_repository.git"
+    - git config --global user.name ${GIT_USER}
+    - git config --global user.email ${GIT_USER}@checkout.com
+    - aws sts get-caller-identity
+    - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    - export BUCKET=cko-shared-state-bucket
+    - export KEY=${AWS_ACCOUNT_ID}/${SPACELIFT_VAR_ENV}-`basename $TF_VAR_spacelift_repository`/`basename $TF_VAR_spacelift_project_root`/state.tf
+    - echo "Set Terraform CLI arguments"
+    - export TF_VAR_env=${SPACELIFT_VAR_ENV}
+    - export TF_CLI_ARGS_init="-backend-config=bucket=${BUCKET} -backend-config=key=${KEY} -backend-config=region=eu-west-1"
+    - echo BUCKET=${BUCKET}
+    - echo KEY=${KEY}
+    - echo TF_CLI_ARGS_init=${TF_CLI_ARGS_init}
+    - if [[ -e ../../../variables/default.tfvars ]]; then cp ../../../variables/default.tfvars default.auto.tfvars; else echo "No variables to copy"; fi
+    - if [[ -e ../../../variables/${SPACELIFT_VAR_ENV}.tfvars ]]; then cp ../../../variables/${SPACELIFT_VAR_ENV}.tfvars ${SPACELIFT_VAR_ENV}.auto.tfvars; else echo "No variables to copy"; fi
+
+  environment:
+    AWS_REGION: eu-west-1

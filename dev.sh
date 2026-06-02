@@ -50,11 +50,11 @@ sleep 0.5
 echo ""
 echo "==> Starting API (dotnet run)..."
 : > "$API_LOG"
-(cd "$SCRIPT_DIR/api" && dotnet run >> "$API_LOG" 2>&1) &
+(cd "$SCRIPT_DIR/applications/DueDiligence.RiskTakerTool.Api" && dotnet run >> "$API_LOG" 2>&1) &
 
 echo "==> Starting UI (npm run dev)..."
 : > "$UI_LOG"
-(cd "$SCRIPT_DIR/ui" && npm run dev >> "$UI_LOG" 2>&1) &
+(cd "$SCRIPT_DIR/applications/DueDiligence.RiskTakerTool.WebUI" && npm run dev >> "$UI_LOG" 2>&1) &
 
 echo ""
 echo "==> Waiting for services to be ready..."
