@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import DatadogChronicle from '@/components/DatadogChronicle';
 import DynamoDbExplorer from '@/components/DynamoDbExplorer';
+import SqsExplorer from '@/components/SqsExplorer';
 
-type Tab = 'datadog' | 'dynamodb';
+type Tab = 'datadog' | 'dynamodb' | 'sqs';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'datadog', label: 'Datadog Chronicle' },
   { id: 'dynamodb', label: 'DynamoDB (QA)' },
+  { id: 'sqs', label: 'SQS' },
 ];
 
 export default function Page() {
@@ -44,6 +46,7 @@ export default function Page() {
 
       {tab === 'datadog' && <DatadogChronicle />}
       {tab === 'dynamodb' && <DynamoDbExplorer />}
+      {tab === 'sqs' && <SqsExplorer />}
     </div>
   );
 }

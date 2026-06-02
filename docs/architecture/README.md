@@ -1,6 +1,6 @@
 # Architecture Diagrams
 
-This directory contains the target engineering views for the **Due Diligence Logs Teller Agent** once productionized (ECS Fargate, internal ALB, Okta BFF). These reflect the decisions in the parent `CLAUDE.md` and supersede the local-only developer setup.
+This directory contains the target engineering views for the **Due Diligence Risk-Taker Tool** once productionized (ECS Fargate, internal ALB, Okta BFF). These reflect the decisions in the parent `CLAUDE.md` and supersede the local-only developer setup.
 
 ## Included diagrams
 

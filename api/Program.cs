@@ -1,6 +1,7 @@
 using Amazon.BedrockAgentRuntime;
 using Amazon.BedrockRuntime;
 using Amazon.DynamoDBv2;
+using Amazon.SQS;
 using Amazon.Extensions.NETCore.Setup;
 using Amazon.Runtime;
 using Amazon.Runtime.CredentialManagement;
@@ -20,6 +21,7 @@ builder.Services.AddSwaggerGen();
 // Picks up AWS credentials from env vars, ~/.aws/credentials, or IAM role automatically.
 // Set AWS_PROFILE or AWS_DEFAULT_REGION env vars to control which account/region is used.
 builder.Services.AddAWSService<IAmazonDynamoDB>();
+builder.Services.AddAWSService<IAmazonSQS>();
 
 // Bedrock: explicitly load the configured profile so the client never silently
 // falls back to a different (potentially expired) default profile.
@@ -57,6 +59,7 @@ builder.Services.AddScoped<AiQueryService>();
 builder.Services.AddScoped<BedrockAgentService>();
 builder.Services.AddScoped<AgentRuntimeService>();
 builder.Services.AddScoped<DynamoDbService>();
+builder.Services.AddScoped<SqsService>();
 
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
@@ -74,5 +77,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 app.MapControllers();
+
+// Public health endpoint for the ALB target-group health check (no auth).
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();

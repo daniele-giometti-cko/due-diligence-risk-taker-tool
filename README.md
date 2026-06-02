@@ -1,11 +1,13 @@
-# Due Diligence — Logs Teller Agent
+# Due Diligence — Risk-Taker Tool
 
-An internal developer tool for querying production observability data in plain English.
-The primary feature is the **Datadog Chronicle** — an agentic flow where Claude (via AWS AgentCore Runtime) queries Datadog and narrates what happened, streamed back to your browser in real time.
+An internal full-stack operational tool for the Due Diligence team. Four modes (two built, two planned):
 
-It also includes an assistive **DynamoDB** query mode, where the AI drafts a Query/Scan and you review/edit before executing.
+1. **Datadog Chronicle** (built, primary) — an agentic flow where Claude (via AWS AgentCore Runtime) queries Datadog and narrates what happened, streamed to your browser in real time.
+2. **DynamoDB** (built) — an assistive query mode where the AI drafts a Query/Scan and you review/edit before executing; shows the first ~20–30 items.
+3. **AWS SQS** (planned) — craft an event/payload/message attributes, then send or purge. Mutating actions, needed against prod queues; guarded by preview + typed-queue-name confirmation.
+4. **CloudWatch** (planned) — query a Lambda's or ECS service's logs and get a human-readable narrative, with Bedrock writing the summary.
 
-> **DynamoDB mode is for lower environments only (QA).** It's intended for ad-hoc data inspection during development and is not wired up for production accounts. Datadog Chronicle works across all environments.
+> **DynamoDB mode is for lower environments only (QA).** Datadog Chronicle works across all environments. SQS (planned) deliberately targets prod queues — see `CLAUDE.md` for its guardrails. Was formerly "logs-teller-agent"; the deployed AgentCore runtime keeps that legacy name.
 
 ---
 
@@ -174,7 +176,7 @@ You can also use the **Manual Query Builder** to skip the AI step and fill the f
 ## Project structure
 
 ```
-due-diligence-logs-teller-agent/
+due-diligence-risk-taker-tool/
 ├── api/                  .NET 8 Web API (port 5000)
 │   ├── Controllers/      QueryController · AgentChronicleController
 │   ├── Services/         AiQueryService · DynamoDbService · AgentRuntimeService
