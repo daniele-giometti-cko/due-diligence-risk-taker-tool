@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Agentic - Logs Teller',
+  title: 'DD Risk-Taker Tool',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

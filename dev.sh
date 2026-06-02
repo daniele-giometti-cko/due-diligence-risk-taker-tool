@@ -6,8 +6,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-API_LOG="/tmp/logs-teller-api.log"
-UI_LOG="/tmp/logs-teller-ui.log"
+API_LOG="/tmp/risk-taker-tool-api.log"
+UI_LOG="/tmp/risk-taker-tool-ui.log"
 
 kill_port() {
   local port=$1

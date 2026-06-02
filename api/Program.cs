@@ -4,7 +4,7 @@ using Amazon.DynamoDBv2;
 using Amazon.Extensions.NETCore.Setup;
 using Amazon.Runtime;
 using Amazon.Runtime.CredentialManagement;
-using DueDiligenceLogsTellerAgent.Api.Services;
+using DueDiligenceRiskTakerTool.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 

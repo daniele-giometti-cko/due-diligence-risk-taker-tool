@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using DueDiligenceLogsTellerAgent.Api.Models;
-using DueDiligenceLogsTellerAgent.Api.Services;
+using DueDiligenceRiskTakerTool.Api.Models;
+using DueDiligenceRiskTakerTool.Api.Services;
 
-namespace DueDiligenceLogsTellerAgent.Api.Controllers;
+namespace DueDiligenceRiskTakerTool.Api.Controllers;
 
 [ApiController]
 [Route("[controller]")]

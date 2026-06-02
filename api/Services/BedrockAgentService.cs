@@ -2,7 +2,7 @@ using System.Text;
 using Amazon.BedrockAgentRuntime;
 using Amazon.BedrockAgentRuntime.Model;
 
-namespace DueDiligenceLogsTellerAgent.Api.Services;
+namespace DueDiligenceRiskTakerTool.Api.Services;
 
 public class BedrockAgentService
 {

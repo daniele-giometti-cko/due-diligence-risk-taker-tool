@@ -3,9 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Amazon.Runtime;
-using DueDiligenceLogsTellerAgent.Api.Models;
+using DueDiligenceRiskTakerTool.Api.Models;
 
-namespace DueDiligenceLogsTellerAgent.Api.Services;
+namespace DueDiligenceRiskTakerTool.Api.Services;
 
 /// <summary>
 /// Calls an AgentCore AgentRuntime via raw HTTP + SigV4.

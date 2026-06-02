@@ -3,8 +3,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>DueDiligenceLogsTellerAgent.Api</RootNamespace>
-    <UserSecretsId>due-diligence-logs-teller-agent-api</UserSecretsId>
+    <RootNamespace>DueDiligenceRiskTakerTool.Api</RootNamespace>
+    <UserSecretsId>due-diligence-risk-taker-tool-api</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AWSSDK.BedrockAgentRuntime" Version="3.7.*" />

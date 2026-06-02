@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Amazon.BedrockRuntime;
 using Amazon.BedrockRuntime.Model;
-using DueDiligenceLogsTellerAgent.Api.Models;
+using DueDiligenceRiskTakerTool.Api.Models;
 
-namespace DueDiligenceLogsTellerAgent.Api.Services;
+namespace DueDiligenceRiskTakerTool.Api.Services;
 
 public class AiQueryService
 {

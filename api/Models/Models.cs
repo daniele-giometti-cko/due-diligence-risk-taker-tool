@@ -1,4 +1,4 @@
-namespace DueDiligenceLogsTellerAgent.Api.Models;
+namespace DueDiligenceRiskTakerTool.Api.Models;
 
 public class GenerateQueryRequest
 {

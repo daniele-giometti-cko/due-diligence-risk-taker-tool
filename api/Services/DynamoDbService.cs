@@ -2,9 +2,9 @@ using System.Text.Json;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime.CredentialManagement;
-using DueDiligenceLogsTellerAgent.Api.Models;
+using DueDiligenceRiskTakerTool.Api.Models;
 
-namespace DueDiligenceLogsTellerAgent.Api.Services;
+namespace DueDiligenceRiskTakerTool.Api.Services;
 
 public class DynamoDbService
 {

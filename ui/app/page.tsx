@@ -16,7 +16,7 @@ export default function Page() {
 
   return (
     <div>
-      <h1>Agentic - Logs Teller</h1>
+      <h1>Due Diligence — Risk-Taker Tool</h1>
 
       <nav style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid #ccc', marginBottom: '1.25rem' }}>
         {TABS.map(t => {
