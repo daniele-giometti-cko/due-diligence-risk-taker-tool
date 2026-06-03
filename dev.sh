@@ -6,8 +6,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-API_LOG="/tmp/logs-teller-api.log"
-UI_LOG="/tmp/logs-teller-ui.log"
+API_LOG="/tmp/risk-taker-tool-api.log"
+UI_LOG="/tmp/risk-taker-tool-ui.log"
 
 kill_port() {
   local port=$1
@@ -50,11 +50,11 @@ sleep 0.5
 echo ""
 echo "==> Starting API (dotnet run)..."
 : > "$API_LOG"
-(cd "$SCRIPT_DIR/api" && dotnet run >> "$API_LOG" 2>&1) &
+(cd "$SCRIPT_DIR/applications/DueDiligence.RiskTakerTool.Api" && dotnet run >> "$API_LOG" 2>&1) &
 
 echo "==> Starting UI (npm run dev)..."
 : > "$UI_LOG"
-(cd "$SCRIPT_DIR/ui" && npm run dev >> "$UI_LOG" 2>&1) &
+(cd "$SCRIPT_DIR/applications/DueDiligence.RiskTakerTool.WebUI" && npm run dev >> "$UI_LOG" 2>&1) &
 
 echo ""
 echo "==> Waiting for services to be ready..."

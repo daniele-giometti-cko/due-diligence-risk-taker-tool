@@ -1,0 +1,5 @@
+aws_region   = "eu-west-1"
+service_name = "due-diligence-risk-taker-tool"
+product_name = "due-diligence-risk-taker-tool"
+pillar       = "due-diligence"
+team_name    = "core-platform"

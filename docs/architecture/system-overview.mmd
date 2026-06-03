@@ -1,0 +1,37 @@
+flowchart LR
+    engineer[DD engineer]
+    browser[Browser]
+    warp[Cloudflare WARP\ninternal-only access]
+    dns[Private DNS\nckotech.internal]
+    alb[Shared internal ALB\nHTTPS with private CA cert]
+    bff[Next.js BFF\nFargate task]
+    api[.NET 8 API\nFargate task]
+    okta[Okta OIDC\nsign-in at the BFF]
+    agentcore[AgentCore Runtime\nStrands plus Datadog MCP]
+    dynamodb[DynamoDB\nQA tables]
+    secrets[Secrets Manager\nOkta secret, API key, DD keys, Bedrock token]
+    datadog[Datadog\nlogs, traces, metrics]
+    gh[GitHub Actions]
+    tf[Spacelift and OpenTofu]
+
+    engineer --> browser
+    browser --> warp
+    warp --> dns
+    dns --> alb
+    alb -->|default route| bff
+    alb -->|/api routes| api
+    bff -->|inject X-API-KEY server-side| api
+    browser -. encrypted session cookie .-> bff
+    browser -. sign in when enabled .-> okta
+    bff -. validate Okta tokens when enabled .-> okta
+    api -->|SigV4 SSE| agentcore
+    api --> dynamodb
+    api --> secrets
+    bff --> secrets
+    api -. structured logs and traces .-> datadog
+    bff -. structured logs .-> datadog
+    gh -. build and push images .-> api
+    gh -. build and push images .-> bff
+    tf -. provision AWS resources .-> alb
+    tf -. provision AWS resources .-> api
+    tf -. provision AWS resources .-> bff

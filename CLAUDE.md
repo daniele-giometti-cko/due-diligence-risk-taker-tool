@@ -2,57 +2,78 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Due Diligence Agentic - Logs Teller Agent
+## Due Diligence Risk-Taker Tool
 
-Internal full-stack tool for querying Datadog logs and DynamoDB tables via AI. The primary feature is the **Datadog Chronicle** — a streaming, agentic flow where a Python container on AWS AgentCore Runtime uses Strands + Claude to query Datadog and narrate what happened. The **DynamoDB explorer** is a secondary mode for ad-hoc data inspection in lower environments (QA). Local developer use only — no deployment pipeline.
+Internal full-stack operational tool for the Due Diligence team, with four modes (two built, two planned):
+
+1. **Datadog Chronicle** (built, primary) — a streaming, agentic flow where a Python container on AWS AgentCore Runtime uses Strands + Claude to query Datadog and narrate what happened.
+2. **DynamoDB explorer** (built) — ad-hoc table query showing the first ~20–30 items; AI generates the query, the user reviews/executes. QA only.
+3. **AWS SQS** (built) — craft an event/payload/message attributes, then **send** or **purge**. Mutating actions; works against real queues (incl. `cko-gen2-prod` / `cko-gen3-prod`), so guarded by preview-before-send + typed-queue-name confirmation rather than environment lockout. Locally points to the developer's own AWS roles.
+4. **CloudWatch** (planned) — query a resource's logs (a Lambda or ECS service) and return a human-readable narrative outcome, with Bedrock helping write the response.
+
+> **Naming note:** the project was renamed from "logs-teller-agent" to "risk-taker-tool". The **already-deployed** AgentCore runtime, its IAM role, ECR repo, and the `due-diligence/logs-teller-agent/dd-*-key` Secrets Manager paths intentionally **keep their original `logs-teller` names** — renaming live resources would break mode #1. Only the application code/identity was renamed.
+
+Productionization (ECS Fargate behind an internal ALB, Okta on the UI) is a separate in-flight engagement — see `docs/architecture/` and the AWS infrastructure section below. Local developer use still works without any of that.
 
 ## Source layout
 
 ```
-due-diligence-logs-teller-agent/
-├── api/                                            # .NET 8 Web API (port 5000)
-│   ├── Controllers/
-│   │   ├── QueryController.cs                      # DynamoDB endpoints + profile/env-labels
-│   │   └── AgentChronicleController.cs             # POST /agent-chronicle/{generate,stream} — SSE streaming
-│   ├── Services/
-│   │   ├── AiQueryService.cs                       # Bedrock invocation; DynamoDbSystemPrompt
-│   │   ├── DynamoDbService.cs                      # Query/Scan executor; per-profile client creation; BuildExpressionValues
-│   │   ├── AgentRuntimeService.cs                  # Hand-rolled SigV4; streams SSE from AgentCore Runtime; parses __METRICS__ sentinel
-│   │   └── BedrockAgentService.cs                  # InvokeAgentAsync via EventStream (legacy, unused in production flow)
-│   ├── Models/
-│   │   └── Models.cs                               # DynamoQuery, GenerateQueryRequest, ExecuteQueryResponse, AgentChronicleRequest/Response, AgentStreamChunk
-│   ├── Program.cs                                  # DI wiring; Bedrock client setup; CORS → localhost:3000
-│   └── appsettings.json                            # AWS region, Bedrock config (ModelId, AgentRuntimeArn), EnvironmentLabels
-├── ui/                                             # Next.js 14 App Router (port 3000)
-│   ├── app/
-│   │   ├── page.tsx                                # Root page — tab switcher between DatadogChronicle and DynamoDbExplorer
-│   │   └── layout.tsx                              # HTML shell, monospace font, 2rem padding
-│   ├── components/
-│   │   ├── DatadogChronicle.tsx                    # PRIMARY: streams /agent-chronicle/stream; localStorage history (20 max); token counts
-│   │   ├── DynamoDbExplorer.tsx                    # DDB mode wrapper: profile picker + QueryInput + ManualQueryBuilder + QueryPreview + ResultsTable
-│   │   ├── QueryInput.tsx                          # NL input + table dropdown for DDB mode
-│   │   ├── ManualQueryBuilder.tsx                  # PK/SK form builder
-│   │   ├── QueryPreview.tsx                        # Editable JSON textarea
-│   │   └── ResultsTable.tsx                        # Dynamic-column table
-│   └── services/
-│       └── queryService.ts                         # DDB + profile API calls
-├── agentcore/                                      # Python AgentCore Runtime container
-│   ├── agent_runtime.py                            # BedrockAgentCoreApp entrypoint; Strands Agent; Datadog MCP via Secrets Manager creds; streams via yield
-│   ├── deploy.py                                   # bedrock-agentcore-starter-toolkit; Docker build + ECR push + create_agent_runtime
-│   ├── update_runtime.py                           # update_agent_runtime with new ECR image URI
-│   ├── requirements.txt                            # bedrock-agentcore, strands-agents, boto3, mcp, httpx
-│   └── Dockerfile                                  # ARM64 container for AgentCore
+due-diligence-risk-taker-tool/
+├── applications/
+│   ├── DueDiligence.RiskTakerTool.Api/             # .NET 8 Web API (port 5000)
+│   │   ├── Controllers/
+│   │   │   ├── QueryController.cs                  # DynamoDB endpoints + profile/env-labels
+│   │   │   ├── AgentChronicleController.cs         # POST /agent-chronicle/{generate,stream} — SSE streaming
+│   │   │   └── SqsController.cs                    # GET /sqs/queues; POST /sqs/send; POST /sqs/purge
+│   │   ├── Services/
+│   │   │   ├── AiQueryService.cs                   # Bedrock invocation; DynamoDbSystemPrompt
+│   │   │   ├── DynamoDbService.cs                  # Query/Scan executor; per-profile client creation; BuildExpressionValues
+│   │   │   ├── AgentRuntimeService.cs              # Hand-rolled SigV4; streams SSE from AgentCore Runtime; parses __METRICS__ sentinel
+│   │   │   ├── SqsService.cs                       # Send/Purge; per-profile SQS clients; never logs message bodies
+│   │   │   └── BedrockAgentService.cs              # InvokeAgentAsync via EventStream (legacy, unused in production flow)
+│   │   ├── Models/
+│   │   │   └── Models.cs                           # DynamoQuery, GenerateQueryRequest, ExecuteQueryResponse, AgentChronicleRequest/Response, AgentStreamChunk
+│   │   ├── Program.cs                              # DI wiring; Bedrock client setup; CORS → localhost:3000
+│   │   └── appsettings.json                        # AWS region, Bedrock config (ModelId, AgentRuntimeArn), EnvironmentLabels
+│   ├── DueDiligence.RiskTakerTool.WebUI/           # Next.js 14 App Router (port 3000)
+│   │   ├── app/
+│   │   │   ├── page.tsx                            # Root page — tab switcher between modes
+│   │   │   └── layout.tsx                          # HTML shell, monospace font, 2rem padding
+│   │   ├── components/
+│   │   │   ├── DatadogChronicle.tsx                # PRIMARY: streams /agent-chronicle/stream; localStorage history (20 max); token counts
+│   │   │   ├── DynamoDbExplorer.tsx                # DDB mode wrapper: profile picker + QueryInput + ManualQueryBuilder + QueryPreview + ResultsTable
+│   │   │   ├── SqsExplorer.tsx                     # SQS mode: queue picker, message builder, send/purge with confirmation guards
+│   │   │   ├── QueryInput.tsx                      # NL input + table dropdown for DDB mode
+│   │   │   ├── ManualQueryBuilder.tsx              # PK/SK form builder
+│   │   │   ├── QueryPreview.tsx                    # Editable JSON textarea
+│   │   │   └── ResultsTable.tsx                    # Dynamic-column table
+│   │   └── services/
+│   │       ├── queryService.ts                     # DDB + profile API calls
+│   │       └── sqsService.ts                       # SQS API calls
+│   └── DueDiligence.RiskTakerTool.AgentCore/       # Python AgentCore Runtime container
+│       ├── agent_runtime.py                        # BedrockAgentCoreApp entrypoint; Strands Agent; Datadog MCP via Secrets Manager creds; streams via yield
+│       ├── deploy.py                               # bedrock-agentcore-starter-toolkit; Docker build + ECR push + create_agent_runtime
+│       ├── update_runtime.py                       # update_agent_runtime with new ECR image URI
+│       ├── requirements.txt                        # bedrock-agentcore, strands-agents, boto3, mcp, httpx
+│       └── Dockerfile                              # ARM64 container for AgentCore
+├── iac/                                            # Terraform (OpenTofu 1.9+) — skeleton, not yet populated
+│   ├── 150-artifact/components/service/            # ECR repos, artifact S3
+│   ├── 200-app/components/service/                 # ECS, ALB, IAM, Secrets, KMS, DynamoDB
+│   └── variables/                                  # default.tfvars, staging.tfvars, prod.tfvars
+├── .spacelift/config.yml                           # Spacelift CI/CD config (matches harness-ui pattern)
 ├── docs/
 │   ├── setup-from-scratch.md                       # Complete provisioning guide: accounts, regions, IAM, ECR, AgentCore Runtime
 │   ├── agentcore-setup.md                          # (Deprecated) Classic Bedrock Agent + AgentCore Gateway approach — not used
 │   ├── agentcore-vs-direct-api.md                  # Decision analysis: Gateway vs direct Datadog MCP from Python
 │   └── issues-and-resolutions.md                   # 10 discovered issues + fixes; SigV4, ECR, Docker, Bedrock model IDs
-└── due-diligence-logs-teller-agent.sln             # Visual Studio solution file
+└── due-diligence-risk-taker-tool.sln               # Visual Studio solution file
 ```
 
-## Two query modes
+**CloudWatch** remains **not yet implemented** — to be added before productionization, per the agreed sequence (rename → restructure → build SQS + CloudWatch → productionize the full four-mode tool once).
 
-### 1. Datadog Chronicle (primary — agentic)
+## Modes
+
+### 1. Datadog Chronicle (built, primary — agentic)
 
 The main feature. Natural language prompt → AgentCore Runtime (Python) → Strands Agent → Datadog MCP → streaming SSE chronicle back to the UI.
 
@@ -70,9 +91,17 @@ The main feature. Natural language prompt → AgentCore Runtime (Python) → Str
 - The canonical URI path must be **double-encoded** via `BotocoreCanonicalUri()` — `%3A` → `%253A`, matching AWS server-side verification
 - Signed headers: `host`, `x-amz-date`, `x-amz-security-token`, `x-amzn-bedrock-agentcore-runtime-session-id`
 
-### 2. DynamoDB (QA only — AI-assisted)
+### 2. DynamoDB (built, QA only — AI-assisted)
 
-Natural language or manual builder → DynamoDB Query/Scan → results table. The AI **generates** the query; the user reviews/edits the JSON and executes. Intended for ad-hoc data inspection in lower environments only.
+Natural language or manual builder → DynamoDB Query/Scan → results table (first ~20–30 items). The AI **generates** the query; the user reviews/edits the JSON and executes. Intended for ad-hoc data inspection in lower environments only.
+
+### 3. AWS SQS (built — mutating)
+
+Craft an event: body/payload, message attributes, and (FIFO) group/dedup ids → **Send** or **Purge**. Unlike the other modes this performs **mutating, sometimes irreversible** actions against real queues, and is needed in `cko-gen2-prod` / `cko-gen3-prod`. Guardrails are UX-level, not environment lockout: **preview-before-send** (a confirm panel), and **purge requires typing the exact queue name** (enforced both in the UI and server-side in `SqsController.Purge`). Locally it uses the developer's selected AWS profile/role (same per-profile credential pattern as `DynamoDbService`); deployed, it would use the task role (cross-account to gen2-prod + gen3-prod). Endpoints: `GET /sqs/queues`, `POST /sqs/send`, `POST /sqs/purge`. Message bodies/attribute values are never logged (DD domain data) — only queue names + message ids.
+
+### 4. CloudWatch (planned — narrated)
+
+Pick a resource (a Lambda or ECS service), query its logs (Logs Insights), and return a **human-readable narrative** of the outcome, with Bedrock writing the summary (candidate: reuse the existing `BedrockAgentService`, or a direct Bedrock model invoke like the DDB flow — to be decided). Read-only. To be designed/implemented.
 
 ## Key domain contracts
 
@@ -129,14 +158,40 @@ The frontend TypeScript interfaces in `queryService.ts` must stay in sync with t
 
 ## AWS infrastructure
 
+### Existing (already provisioned)
+
 | Resource | Type | Account | Region | Notes |
 |---|---|---|---|---|
-| `cko-gen3-qa` | AWS Account | 944945738260 | eu-west-1 | Application workload |
+| `cko-gen3-qa` | AWS Account | 944945738260 | eu-west-1 | Application workload. Same physical account the DD team labels `cko-merchant-risk-assessment-qa` in sibling repos. |
 | `due_diligence_logs_teller_agentruntime` | AgentCore Runtime | cko-gen3-qa | eu-west-1 | Python ARM64 container; ARN in appsettings.json |
 | `due-diligence-logs-teller-runtime-role` | IAM Role | cko-gen3-qa | — | Trust: `bedrock-agentcore.amazonaws.com` |
 | `due-diligence/logs-teller-agent/dd-api-key` | Secrets Manager | cko-gen3-qa | eu-west-1 | Datadog API key |
 | `due-diligence/logs-teller-agent/dd-app-key` | Secrets Manager | cko-gen3-qa | eu-west-1 | Datadog Application key |
 | `bedrock-agentcore-due_diligence_logs_teller_agentruntime` | ECR Repository | cko-gen3-**pg** | eu-west-1 | Cross-account (SCP blocks CreateRepository in qa) |
+
+### Planned (productionization — ECS Fargate behind internal ALB)
+
+Provisioned via inline `iac/` (Spacelift/OpenTofu, 100/160/200/300 layered, scraper-style). Per-environment; QA first. Naming `${var.env}-risk-taker-tool-${component}`.
+
+| Resource | Type | Account | Region | Notes |
+|---|---|---|---|---|
+| `risk-taker-tool-api` | ECR Repository | cko-artifact (891377407345) | eu-west-1 | .NET API image. Pull granted cross-account to qa/prod; push from `cko-gh`. |
+| `risk-taker-tool-ui` | ECR Repository | cko-artifact (891377407345) | eu-west-1 | Next.js BFF image. |
+| ECS Fargate cluster | ECS | cko-gen3-qa | eu-west-1 | Two services: API (container port 5000) and UI/BFF (port 3000). |
+| Shared internal ALB listener rules + TGs | ELB | cko-gen3-qa | eu-west-1 | Wired into the shared `dd_network` HTTPS listener via remote state. `/api/*` → API; default → UI. Health `/api/_system/ping`. `internal`, `assign_public_ip=false`. |
+| API task role | IAM Role | cko-gen3-qa | — | `bedrock-agentcore:InvokeAgentRuntime` on the existing runtime ARN; `secretsmanager:GetSecretValue` on this app's secret(s); `dynamodb:Query/Scan` on QA tables (qa stack only); KMS decrypt. |
+| UI/BFF task role | IAM Role | cko-gen3-qa | — | `secretsmanager:GetSecretValue` on the app secret (Okta secret, NEXTAUTH_SECRET, downstream API key); KMS decrypt. No data-plane access. |
+| Task execution role(s) | IAM Role | cko-gen3-qa | — | ECR pull, CloudWatch Logs, Secrets Manager read for task bootstrap. |
+| `due-diligence/risk-taker-tool/api-secrets` | Secrets Manager | cko-gen3-qa | eu-west-1 | Downstream `X-API-KEY`, Bedrock bearer token. (per env) New namespace; the existing Datadog keys stay under `due-diligence/logs-teller-agent/*`. |
+| `due-diligence/risk-taker-tool/ui-secrets` | Secrets Manager | cko-gen3-qa | eu-west-1 | Okta client secret + client id, `NEXTAUTH_SECRET` (cookie encryption). (per env) |
+| App KMS CMK | KMS | cko-gen3-qa | eu-west-1 | Encrypts secrets + logs. |
+| CloudWatch log groups | CloudWatch | cko-gen3-qa | eu-west-1 | `/aws/ecs/risk-taker-tool-{api,ui}`; forwarded to Datadog. |
+
+**Auth boundary (decided):** Okta session terminates at the Next.js BFF (HTTP-only encrypted cookie); the BFF injects `X-API-KEY` server-side; the .NET API validates `X-API-KEY` only (Checkout.Gateway), never the Okta token. Auth is conditional — empty config ⇒ both tiers run unauthenticated for local dev. See `docs/architecture/`.
+
+**Versioning & CI (decided):** `GitVersion.yml` (GitVersion) + reusable workflows from `cko-transformation/due-diligence-actions` (`ci-build-docker`, `release-gh`, `ci-deploy-service`, `ci-deploy-service-ui`, `codeql-analysis-csharp`). No plain VERSION files.
+
+**Observability & base images (decided):** Checkout.Diagnostics + Serilog → Datadog; CKO `pki-dotnet:aspnet-8.0.x-alpine` (API) and `pki-node` (UI) base images; `nuget.config` → CKO CodeArtifact.
 
 **AgentCore Runtime ARN** (in `appsettings.json`):
 ```
@@ -167,10 +222,17 @@ arn:aws:bedrock-agentcore:eu-west-1:944945738260:runtime/due_diligence_logs_tell
 
 ## Local development
 
+### Quickstart (both services together)
+
+```bash
+./dev.sh        # kills :5000/:3000, starts API + UI, tails logs
+./dev.sh stop   # kill both
+```
+
 ### API
 
 ```bash
-cd api
+cd applications/DueDiligence.RiskTakerTool.Api
 
 # One-time: store the Bedrock bearer token in user secrets
 dotnet user-secrets init
@@ -188,20 +250,38 @@ dotnet run
 ### UI
 
 ```bash
-cd ui
+cd applications/DueDiligence.RiskTakerTool.WebUI
 npm install   # first time only
 npm run dev
 # → http://localhost:3000
 ```
 
-`ui/.env.local` sets `NEXT_PUBLIC_API_URL=http://localhost:5000`. Both services must run simultaneously.
+`.env.local` sets `NEXT_PUBLIC_API_URL=http://localhost:5000`. Both services must run simultaneously.
+
+#### Okta authentication (local dev)
+
+`.env.local` holds the Okta credentials — it is git-ignored so you must create/maintain it manually:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<any random base64 string — used to sign the session cookie>
+OKTA_AUTHORITY=https://checkout.okta.com/oauth2/default
+OKTA_CLIENT_ID=<Okta app client ID>
+OKTA_CLIENT_SECRET=<Okta app client secret>
+```
+
+- **Auth server**: `https://checkout.okta.com/oauth2/default` (the Okta default Custom Authorization Server — not a custom/named one).
+- **Okta app**: must have `http://localhost:3000/api/auth/okta/callback` registered as a redirect URI, and your user/group assigned to it.
+- **DPoP**: disabled on the app — plain Bearer flow is used.
+- To skip Okta entirely during local dev, add `AUTH_BYPASS=true` to `.env.local`.
 
 ### AgentCore Runtime (Python)
 
 The Python runtime runs in AWS — you don't run it locally. To redeploy after changes:
 
 ```bash
-cd agentcore
+cd applications/DueDiligence.RiskTakerTool.AgentCore
 source .venv/bin/activate        # or create: python -m venv .venv && pip install -r requirements.txt
 python update_runtime.py         # builds Docker image, pushes to ECR (cko-gen3-pg), updates runtime
 ```
