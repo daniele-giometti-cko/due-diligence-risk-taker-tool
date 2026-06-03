@@ -68,8 +68,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+applications/DueDiligence.RiskTakerTool.AgentCore/lib/
+applications/DueDiligence.RiskTakerTool.AgentCore/lib64/
 parts/
 sdist/
 var/

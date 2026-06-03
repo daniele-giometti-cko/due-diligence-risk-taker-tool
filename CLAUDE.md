@@ -258,6 +258,24 @@ npm run dev
 
 `.env.local` sets `NEXT_PUBLIC_API_URL=http://localhost:5000`. Both services must run simultaneously.
 
+#### Okta authentication (local dev)
+
+`.env.local` holds the Okta credentials — it is git-ignored so you must create/maintain it manually:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<any random base64 string — used to sign the session cookie>
+OKTA_AUTHORITY=https://checkout.okta.com/oauth2/default
+OKTA_CLIENT_ID=<Okta app client ID>
+OKTA_CLIENT_SECRET=<Okta app client secret>
+```
+
+- **Auth server**: `https://checkout.okta.com/oauth2/default` (the Okta default Custom Authorization Server — not a custom/named one).
+- **Okta app**: must have `http://localhost:3000/api/auth/okta/callback` registered as a redirect URI, and your user/group assigned to it.
+- **DPoP**: disabled on the app — plain Bearer flow is used.
+- To skip Okta entirely during local dev, add `AUTH_BYPASS=true` to `.env.local`.
+
 ### AgentCore Runtime (Python)
 
 The Python runtime runs in AWS — you don't run it locally. To redeploy after changes:
