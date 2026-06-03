@@ -19,38 +19,48 @@ Productionization (ECS Fargate behind an internal ALB, Okta on the UI) is a sepa
 
 ```
 due-diligence-risk-taker-tool/
-├── api/                                            # .NET 8 Web API (port 5000)
-│   ├── Controllers/
-│   │   ├── QueryController.cs                      # DynamoDB endpoints + profile/env-labels
-│   │   └── AgentChronicleController.cs             # POST /agent-chronicle/{generate,stream} — SSE streaming
-│   ├── Services/
-│   │   ├── AiQueryService.cs                       # Bedrock invocation; DynamoDbSystemPrompt
-│   │   ├── DynamoDbService.cs                      # Query/Scan executor; per-profile client creation; BuildExpressionValues
-│   │   ├── AgentRuntimeService.cs                  # Hand-rolled SigV4; streams SSE from AgentCore Runtime; parses __METRICS__ sentinel
-│   │   └── BedrockAgentService.cs                  # InvokeAgentAsync via EventStream (legacy, unused in production flow)
-│   ├── Models/
-│   │   └── Models.cs                               # DynamoQuery, GenerateQueryRequest, ExecuteQueryResponse, AgentChronicleRequest/Response, AgentStreamChunk
-│   ├── Program.cs                                  # DI wiring; Bedrock client setup; CORS → localhost:3000
-│   └── appsettings.json                            # AWS region, Bedrock config (ModelId, AgentRuntimeArn), EnvironmentLabels
-├── ui/                                             # Next.js 14 App Router (port 3000)
-│   ├── app/
-│   │   ├── page.tsx                                # Root page — tab switcher between DatadogChronicle and DynamoDbExplorer
-│   │   └── layout.tsx                              # HTML shell, monospace font, 2rem padding
-│   ├── components/
-│   │   ├── DatadogChronicle.tsx                    # PRIMARY: streams /agent-chronicle/stream; localStorage history (20 max); token counts
-│   │   ├── DynamoDbExplorer.tsx                    # DDB mode wrapper: profile picker + QueryInput + ManualQueryBuilder + QueryPreview + ResultsTable
-│   │   ├── QueryInput.tsx                          # NL input + table dropdown for DDB mode
-│   │   ├── ManualQueryBuilder.tsx                  # PK/SK form builder
-│   │   ├── QueryPreview.tsx                        # Editable JSON textarea
-│   │   └── ResultsTable.tsx                        # Dynamic-column table
-│   └── services/
-│       └── queryService.ts                         # DDB + profile API calls
-├── agentcore/                                      # Python AgentCore Runtime container
-│   ├── agent_runtime.py                            # BedrockAgentCoreApp entrypoint; Strands Agent; Datadog MCP via Secrets Manager creds; streams via yield
-│   ├── deploy.py                                   # bedrock-agentcore-starter-toolkit; Docker build + ECR push + create_agent_runtime
-│   ├── update_runtime.py                           # update_agent_runtime with new ECR image URI
-│   ├── requirements.txt                            # bedrock-agentcore, strands-agents, boto3, mcp, httpx
-│   └── Dockerfile                                  # ARM64 container for AgentCore
+├── applications/
+│   ├── DueDiligence.RiskTakerTool.Api/             # .NET 8 Web API (port 5000)
+│   │   ├── Controllers/
+│   │   │   ├── QueryController.cs                  # DynamoDB endpoints + profile/env-labels
+│   │   │   ├── AgentChronicleController.cs         # POST /agent-chronicle/{generate,stream} — SSE streaming
+│   │   │   └── SqsController.cs                    # GET /sqs/queues; POST /sqs/send; POST /sqs/purge
+│   │   ├── Services/
+│   │   │   ├── AiQueryService.cs                   # Bedrock invocation; DynamoDbSystemPrompt
+│   │   │   ├── DynamoDbService.cs                  # Query/Scan executor; per-profile client creation; BuildExpressionValues
+│   │   │   ├── AgentRuntimeService.cs              # Hand-rolled SigV4; streams SSE from AgentCore Runtime; parses __METRICS__ sentinel
+│   │   │   ├── SqsService.cs                       # Send/Purge; per-profile SQS clients; never logs message bodies
+│   │   │   └── BedrockAgentService.cs              # InvokeAgentAsync via EventStream (legacy, unused in production flow)
+│   │   ├── Models/
+│   │   │   └── Models.cs                           # DynamoQuery, GenerateQueryRequest, ExecuteQueryResponse, AgentChronicleRequest/Response, AgentStreamChunk
+│   │   ├── Program.cs                              # DI wiring; Bedrock client setup; CORS → localhost:3000
+│   │   └── appsettings.json                        # AWS region, Bedrock config (ModelId, AgentRuntimeArn), EnvironmentLabels
+│   ├── DueDiligence.RiskTakerTool.WebUI/           # Next.js 14 App Router (port 3000)
+│   │   ├── app/
+│   │   │   ├── page.tsx                            # Root page — tab switcher between modes
+│   │   │   └── layout.tsx                          # HTML shell, monospace font, 2rem padding
+│   │   ├── components/
+│   │   │   ├── DatadogChronicle.tsx                # PRIMARY: streams /agent-chronicle/stream; localStorage history (20 max); token counts
+│   │   │   ├── DynamoDbExplorer.tsx                # DDB mode wrapper: profile picker + QueryInput + ManualQueryBuilder + QueryPreview + ResultsTable
+│   │   │   ├── SqsExplorer.tsx                     # SQS mode: queue picker, message builder, send/purge with confirmation guards
+│   │   │   ├── QueryInput.tsx                      # NL input + table dropdown for DDB mode
+│   │   │   ├── ManualQueryBuilder.tsx              # PK/SK form builder
+│   │   │   ├── QueryPreview.tsx                    # Editable JSON textarea
+│   │   │   └── ResultsTable.tsx                    # Dynamic-column table
+│   │   └── services/
+│   │       ├── queryService.ts                     # DDB + profile API calls
+│   │       └── sqsService.ts                       # SQS API calls
+│   └── DueDiligence.RiskTakerTool.AgentCore/       # Python AgentCore Runtime container
+│       ├── agent_runtime.py                        # BedrockAgentCoreApp entrypoint; Strands Agent; Datadog MCP via Secrets Manager creds; streams via yield
+│       ├── deploy.py                               # bedrock-agentcore-starter-toolkit; Docker build + ECR push + create_agent_runtime
+│       ├── update_runtime.py                       # update_agent_runtime with new ECR image URI
+│       ├── requirements.txt                        # bedrock-agentcore, strands-agents, boto3, mcp, httpx
+│       └── Dockerfile                              # ARM64 container for AgentCore
+├── iac/                                            # Terraform (OpenTofu 1.9+) — skeleton, not yet populated
+│   ├── 150-artifact/components/service/            # ECR repos, artifact S3
+│   ├── 200-app/components/service/                 # ECS, ALB, IAM, Secrets, KMS, DynamoDB
+│   └── variables/                                  # default.tfvars, staging.tfvars, prod.tfvars
+├── .spacelift/config.yml                           # Spacelift CI/CD config (matches harness-ui pattern)
 ├── docs/
 │   ├── setup-from-scratch.md                       # Complete provisioning guide: accounts, regions, IAM, ECR, AgentCore Runtime
 │   ├── agentcore-setup.md                          # (Deprecated) Classic Bedrock Agent + AgentCore Gateway approach — not used
@@ -59,7 +69,7 @@ due-diligence-risk-taker-tool/
 └── due-diligence-risk-taker-tool.sln               # Visual Studio solution file
 ```
 
-> The tree above predates the SQS mode. SQS is now built (`api/Controllers/SqsController.cs`, `api/Services/SqsService.cs`, `ui/components/SqsExplorer.tsx`, `ui/services/sqsService.ts`). **CloudWatch** remains **not yet implemented** — to be added before productionization, per the agreed sequence (rename → build SQS + CloudWatch → productionize the full four-mode tool once).
+**CloudWatch** remains **not yet implemented** — to be added before productionization, per the agreed sequence (rename → restructure → build SQS + CloudWatch → productionize the full four-mode tool once).
 
 ## Modes
 
@@ -212,10 +222,17 @@ arn:aws:bedrock-agentcore:eu-west-1:944945738260:runtime/due_diligence_logs_tell
 
 ## Local development
 
+### Quickstart (both services together)
+
+```bash
+./dev.sh        # kills :5000/:3000, starts API + UI, tails logs
+./dev.sh stop   # kill both
+```
+
 ### API
 
 ```bash
-cd api
+cd applications/DueDiligence.RiskTakerTool.Api
 
 # One-time: store the Bedrock bearer token in user secrets
 dotnet user-secrets init
@@ -233,20 +250,20 @@ dotnet run
 ### UI
 
 ```bash
-cd ui
+cd applications/DueDiligence.RiskTakerTool.WebUI
 npm install   # first time only
 npm run dev
 # → http://localhost:3000
 ```
 
-`ui/.env.local` sets `NEXT_PUBLIC_API_URL=http://localhost:5000`. Both services must run simultaneously.
+`.env.local` sets `NEXT_PUBLIC_API_URL=http://localhost:5000`. Both services must run simultaneously.
 
 ### AgentCore Runtime (Python)
 
 The Python runtime runs in AWS — you don't run it locally. To redeploy after changes:
 
 ```bash
-cd agentcore
+cd applications/DueDiligence.RiskTakerTool.AgentCore
 source .venv/bin/activate        # or create: python -m venv .venv && pip install -r requirements.txt
 python update_runtime.py         # builds Docker image, pushes to ECR (cko-gen3-pg), updates runtime
 ```
